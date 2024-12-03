@@ -2,6 +2,7 @@ import socket
 import threading
 import tkinter as tk
 from tkinter import filedialog
+from tkinter import PhotoImage
 
 # Создаем сокет
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -43,19 +44,39 @@ def send_file():
 root = tk.Tk()
 root.title("Chat")
 
-chat_box = tk.Text(root)
-chat_box.pack()
+# Настройка стилей
+root.geometry("400x500")
+root.config(bg="#f4f4f9")  # Цвет фона окна
 
-message_entry = tk.Entry(root)
-message_entry.pack()
+# Окно чата
+chat_box = tk.Text(root, wrap=tk.WORD, height=15, width=50, bg="#eaeaea", fg="#333333", font=("Arial", 10), padx=10, pady=10)
+chat_box.pack(padx=10, pady=10)
 
-send_button = tk.Button(root, text="Send", command=send_message)
-send_button.pack()
+# Текстовое поле для ввода сообщения
+message_frame = tk.Frame(root, bg="#f4f4f9")  # Создаем контейнер для текстового поля
+message_frame.pack(fill=tk.X, padx=10, pady=5)
 
-file_button = tk.Button(root, text="Send File", command=send_file)
-file_button.pack()
+message_entry = tk.Entry(message_frame, width=50, font=("Arial", 12), bd=2, relief="solid")
+message_entry.pack(fill=tk.X, padx=10, pady=5)
 
-receive_thread = threading.Thread(target=receive_messages)
+# Панель кнопок
+button_frame = tk.Frame(root, bg="#f4f4f9")
+button_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+# Кнопка отправки сообщения
+send_icon = PhotoImage(file="send_icon.png")  # Укажите путь к иконке
+send_button = tk.Button(button_frame, text="Send", image=send_icon, compound=tk.LEFT, command=send_message, 
+                        bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), bd=0, relief="flat", padx=10, pady=5)
+send_button.pack(side=tk.RIGHT, padx=10, pady=5)
+
+# Кнопка отправки файла
+file_icon = PhotoImage(file="file_icon.png")  # Укажите путь к иконке
+file_button = tk.Button(button_frame, text="Send File", image=file_icon, compound=tk.LEFT, command=send_file, 
+                        bg="#008CBA", fg="white", font=("Arial", 10, "bold"), bd=0, relief="flat", padx=10, pady=5)
+file_button.pack(side=tk.RIGHT, padx=10, pady=5)
+
+# Запуск потока для получения сообщений
+receive_thread = threading.Thread(target=receive_messages, daemon=True)
 receive_thread.start()
 
 root.mainloop()

@@ -21,25 +21,34 @@ def accept_incoming_connections():
         addresses[client] = client_address
         threading.Thread(target=handle_client, args=(client,)).start()
 
-# Функция для обработки сообщений одного клиента
 def handle_client(client):
-    name = client.recv(1024).decode("utf-8")
-    welcome = f"Welcome {name}! If you ever want to quit, type 'quit' to exit."
-    client.send(welcome.encode("utf-8"))
-    msg = f"{name} has joined the chat!"
-    broadcast(msg)
-    clients[client] = name
-
-    while True:
-        msg = client.recv(1024).decode("utf-8")
-        if msg != "quit":
-            broadcast(msg, name + ": ")
-        else:
-            client.send("Goodbye!".encode("utf-8"))
-            client.close()
-            del clients[client]
-            broadcast(f"{name} has left the chat.")
-            break
+    try:
+        name = client.recv(1024).decode("utf-8")  # Получаем имя клиента
+        welcome = f"Welcome {name}! If you ever want to quit, type 'quit' to exit."
+        client.send(welcome.encode("utf-8"))
+        
+        msg = f"{name} has joined the chat!"
+        broadcast(msg)  # Сообщаем всем клиентам, что новый пользователь присоединился
+        clients[client] = name  # Добавляем клиента в список
+        
+        while True:
+            try:
+                msg = client.recv(1024).decode("utf-8")  # Ожидаем сообщение от клиента
+                if msg.lower() == "quit":
+                    client.send("Goodbye!".encode("utf-8"))
+                    client.close()  # Закрываем соединение с клиентом
+                    del clients[client]  # Удаляем клиента из списка
+                    broadcast(f"{name} has left the chat.")  # Уведомляем остальных клиентов
+                    break
+                else:
+                    broadcast(msg, name + ": ")  # Рассылаем сообщение всем остальным
+            except ConnectionResetError:
+                # Если соединение с клиентом потеряно, удаляем его из списка
+                print(f"Connection lost with {name}")
+                del clients[client]
+                break
+    except Exception as e:
+        print(f"Error handling client: {e}")
 
 # Функция для рассылки сообщений всем клиентам
 def broadcast(msg, name=""):

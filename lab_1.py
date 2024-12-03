@@ -1,150 +1,84 @@
-Конечно! Давайте рассмотрим вариант номер 5: "Вычислить суммы произведений n чисел \(\sum_{i=1}^{n} y_{i} x_{i}\), \(i=1,2,3,4, \ldots n\)".
-
-### Шаг 1: Постановка задачи
-
-Нам нужно вычислить сумму произведений двух массивов чисел \(x_i\) и \(y_i\) для \(i\) от 1 до \(n\). То есть, нам нужно вычислить \(\sum_{i=1}^{n} y_{i} x_{i}\).
-
-### Шаг 2: Реализация задачи
-
-Мы будем использовать Python для реализации этой задачи. Мы будем сравнивать четыре различных схемы:
-1. Прямая схема
-2. Каскадная схема
-3. Модифицированная каскадная схема
-4. Каскадная схема со сдвигом
-
-### Шаг 3: Реализация кода
-
-#### 1. Прямая схема
-
-Прямая схема выполняет вычисления последовательно.
-
-```python
 import time
+from multiprocessing import Pool, cpu_count
 
-def direct_scheme(x, y):
-    return sum(x_i * y_i for x_i, y_i in zip(x, y))
+# Функция для вычисления частичной суммы
+def partial_sum(args):
+    a, b, start, end = args
+    return sum(a[i] * b[i] for i in range(start, end))
 
-# Пример использования
-x = list(range(1, 1000001))  # Пример: числа от 1 до 1,000,000
-y = list(range(1000001, 2000001))  # Пример: числа от 1,000,001 до 2,000,000
+# Прямая схема (последовательная)
+def sequential_sum_of_products(a, b):
+    return sum(x * y for x, y in zip(a, b))
 
-start_time = time.time()
-result = direct_scheme(x, y)
-end_time = time.time()
-print(f"Direct scheme result: {result}, Time: {end_time - start_time} seconds")
-```
+# Каскадная схема
+def parallel_sum_of_products(a, b, num_processes):
+    chunk_size = len(a) // num_processes
+    ranges = [(a, b, i * chunk_size, (i + 1) * chunk_size) for i in range(num_processes)]
+    ranges[-1] = (a, b, ranges[-1][2], len(a))  # Коррекция последнего диапазона
+    
+    with Pool(processes=num_processes) as pool:
+        partial_results = pool.map(partial_sum, ranges)
+    
+    return sum(partial_results)
 
-#### 2. Каскадная схема
+# Модифицированная каскадная схема
+def modified_cascade_sum(a, b, num_processes):
+    chunk_size = len(a) // num_processes
+    ranges = [(a, b, i * chunk_size, (i + 1) * chunk_size) for i in range(num_processes)]
+    ranges[-1] = (a, b, ranges[-1][2], len(a))  # Корректируем последний диапазон
+    
+    with Pool(processes=num_processes) as pool:
+        partial_results = pool.map(partial_sum, ranges)
+    
+    # Объединяем частичные суммы
+    while len(partial_results) > 1:
+        new_results = []
+        for i in range(0, len(partial_results) - 1, 2):
+            new_results.append(partial_results[i] + partial_results[i + 1])
+        if len(partial_results) % 2 == 1:  # Если остался один элемент
+            new_results.append(partial_results[-1])
+        partial_results = new_results
+    
+    return partial_results[0]
 
-Каскадная схема выполняет вычисления параллельно с использованием потоков.
 
-```python
-import concurrent.futures
+# Каскадная схема со сдвигом
+def shifted_cascade_sum(a, b, num_processes):
+    chunk_size = len(a) // num_processes
+    ranges = [(a, b, i * chunk_size, (i + 1) * chunk_size) for i in range(num_processes)]
+    ranges[-1] = (a, b, ranges[-1][2], len(a))  # Корректируем последний диапазон
+    
+    with Pool(processes=num_processes) as pool:
+        partial_results = pool.map(partial_sum, ranges)
+    
+    return sum(partial_results)
 
-def cascade_scheme(x, y):
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(lambda: x_i * y_i) for x_i, y_i in zip(x, y)]
-        results = [future.result() for future in concurrent.futures.as_completed(futures)]
-        return sum(results)
 
-# Пример использования
-start_time = time.time()
-result = cascade_scheme(x, y)
-end_time = time.time()
-print(f"Cascade scheme result: {result}, Time: {end_time - start_time} seconds")
-```
-
-#### 3. Модифицированная каскадная схема
-
-Модифицированная каскадная схема разбивает массивы на более крупные части и выполняет вычисления параллельно.
-
-```python
-def modified_cascade_scheme(x, y):
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        chunk_size = len(x) // 4
-        chunks = [(x[i:i + chunk_size], y[i:i + chunk_size]) for i in range(0, len(x), chunk_size)]
-        futures = [executor.submit(lambda chunk: sum(x_i * y_i for x_i, y_i in zip(chunk[0], chunk[1])), chunk) for chunk in chunks]
-        results = [future.result() for future in concurrent.futures.as_completed(futures)]
-        return sum(results)
-
-# Пример использования
-start_time = time.time()
-result = modified_cascade_scheme(x, y)
-end_time = time.time()
-print(f"Modified cascade scheme result: {result}, Time: {end_time - start_time} seconds")
-```
-
-#### 4. Каскадная схема со сдвигом
-
-Каскадная схема со сдвигом разбивает массивы на части и выполняет вычисления параллельно с использованием сдвига.
-
-```python
-def cascade_scheme_with_shift(x, y):
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        chunk_size = len(x) // 4
-        chunks = [(x[i:i + chunk_size], y[i:i + chunk_size]) for i in range(0, len(x), chunk_size)]
-        futures = [executor.submit(lambda chunk: sum(x_i * y_i for x_i, y_i in zip(chunk[0], chunk[1])), chunk) for chunk in chunks]
-        results = [future.result() for future in concurrent.futures.as_completed(futures)]
-        return sum(results)
-
-# Пример использования
-start_time = time.time()
-result = cascade_scheme_with_shift(x, y)
-end_time = time.time()
-print(f"Cascade scheme with shift result: {result}, Time: {end_time - start_time} seconds")
-```
-
-### Шаг 4: Сравнение результатов
-
-Теперь мы можем сравнить результаты и время выполнения для каждой схемы.
-
-```python
-def main():
-    x = list(range(1, 1000001))  # Пример: числа от 1 до 1,000,000
-    y = list(range(1000001, 2000001))  # Пример: числа от 1,000,001 до 2,000,000
-
-    # Прямая схема
-    start_time = time.time()
-    result = direct_scheme(x, y)
-    end_time = time.time()
-    print(f"Direct scheme result: {result}, Time: {end_time - start_time} seconds")
-
-    # Каскадная схема
-    start_time = time.time()
-    result = cascade_scheme(x, y)
-    end_time = time.time()
-    print(f"Cascade scheme result: {result}, Time: {end_time - start_time} seconds")
-
-    # Модифицированная каскадная схема
-    start_time = time.time()
-    result = modified_cascade_scheme(x, y)
-    end_time = time.time()
-    print(f"Modified cascade scheme result: {result}, Time: {end_time - start_time} seconds")
-
-    # Каскадная схема со сдвигом
-    start_time = time.time()
-    result = cascade_scheme_with_shift(x, y)
-    end_time = time.time()
-    print(f"Cascade scheme with shift result: {result}, Time: {end_time - start_time} seconds")
+# Измерение производительности
+def measure_performance(a, b, method, num_processes=1):
+    start = time.time()
+    result = method(a, b, num_processes) if num_processes > 1 else method(a, b)
+    end = time.time()
+    return result, end - start
 
 if __name__ == "__main__":
-    main()
-```
+    n = 10**6  # Количество элементов
+    a = list(range(1, n + 1))
+    b = list(range(1, n + 1))
+    num_processes = cpu_count()
 
-### Шаг 5: Выводы
+    print("Прямая схема:")
+    seq_result, seq_time = measure_performance(a, b, sequential_sum_of_products)
+    print(f"Результат: {seq_result}, Время: {seq_time:.4f} сек")
 
-После выполнения всех схем, вы можете сравнить время выполнения и результаты для каждой схемы. Это поможет вам определить, какая схема является наиболее эффективной для вашей задачи.
+    print("\nКаскадная схема:")
+    par_result, par_time = measure_performance(a, b, parallel_sum_of_products, num_processes)
+    print(f"Результат: {par_result}, Время: {par_time:.4f} сек")
 
-### Шаг 6: Отчет
+    print("\nМодифицированная каскадная схема:")
+    mod_result, mod_time = measure_performance(a, b, modified_cascade_sum, num_processes)
+    print(f"Результат: {mod_result}, Время: {mod_time:.4f} сек")
 
-Составьте отчет, включающий следующие пункты:
-1. Титульный лист
-2. Постановка задачи
-3. Решение задачи (включая код и объяснения)
-4. Выводы
-
-### Шаг 7: Загрузка в MOODLE и защита лабораторной работы
-
-Загрузите отчет в MOODLE и подготовьтесь к защите лабораторной работы.
-
-Теперь у вас есть полное руководство по выполнению лабораторной работы для вашего варианта задания. Удачи!
+    print("\nКаскадная схема со сдвигом:")
+    shift_result, shift_time = measure_performance(a, b, shifted_cascade_sum, num_processes)
+    print(f"Результат: {shift_result}, Время: {shift_time:.4f} сек")
