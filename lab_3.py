@@ -1,106 +1,61 @@
 import numpy as np
-from multiprocessing import Pool
-import matplotlib.pyplot as plt
-import time
+import concurrent.futures
+import multiprocessing
 
-# Функция для прямого хода
-def forward_elimination(args):
-    matrix, vector, k = args
-    n = len(matrix)
+def gauss_forward(matrix, b, n, k):
+    """
+    Выполняет одну итерацию прямого хода метода Гаусса для строки k.
+    """
     for i in range(k + 1, n):
-        if matrix[k, k] == 0:
-            continue
         factor = matrix[i, k] / matrix[k, k]
         matrix[i, k:] -= factor * matrix[k, k:]
-        vector[i] -= factor * vector[k]
-    return matrix, vector
+        b[i] -= factor * b[k]
 
-# Функция для обратного хода
-def back_substitution(matrix, vector):
-    n = len(matrix)
-    x = np.zeros(n)
-    for i in range(n - 1, -1, -1):
-        x[i] = (vector[i] - np.dot(matrix[i, i + 1:], x[i + 1:])) / matrix[i, i]
-    return x
+def gauss_backward(matrix, b, x, n, k):
+    """
+    Выполняет одну итерацию обратного хода метода Гаусса для строки k.
+    """
+    x[k] = (b[k] - np.dot(matrix[k, k + 1:], x[k + 1:])) / matrix[k, k]
 
-# Параллельный метод Гаусса
-def parallel_gauss(matrix, vector, num_processes):
-    n = len(matrix)
-    for k in range(n - 1):
-        with Pool(processes=num_processes) as pool:
-            chunks = [(matrix, vector, k) for _ in range(num_processes)]
-            results = pool.map(forward_elimination, chunks)
-        
-        matrix, vector = results[0]  # Обновляем только один раз, так как данные идентичны
-
-    x = back_substitution(matrix, vector)
-    return x
-
-# Оценка производительности
-def evaluate_gauss(n, num_processes):
-    A = np.random.rand(n, n) * 100  # Генерация случайной матрицы
-    b = np.random.rand(n) * 100     # Генерация случайного вектора
-
-    # Последовательное выполнение
-    start_seq = time.time()
-    x_seq = np.linalg.solve(A, b)
-    time_seq = time.time() - start_seq
-
-    # Параллельное выполнение
-    start_par = time.time()
-    x_par = parallel_gauss(np.copy(A), np.copy(b), num_processes)
-    time_par = time.time() - start_par
-
-    # Проверка корректности
-    assert np.allclose(x_seq, x_par, atol=1e-6), "Результаты не совпадают!"
-
-    # Ускорение и эффективность
-    speedup = time_seq / time_par
-    efficiency = speedup / num_processes
-
-    return time_seq, time_par, speedup, efficiency
-
-# Построение графиков
-def plot_results(n):
-    num_threads = range(1, 9)
-    times_seq = []
-    times_par = []
-    speedups = []
-    efficiencies = []
-
-    for num_processes in num_threads:
-        time_seq, time_par, speedup, efficiency = evaluate_gauss(n, num_processes)
-        times_seq.append(time_seq)
-        times_par.append(time_par)
-        speedups.append(speedup)
-        efficiencies.append(efficiency)
-
-    # Графики
-    plt.figure(figsize=(12, 6))
+def parallel_gauss(A, b):
+    """
+    Решает систему линейных уравнений Ax = b методом Гаусса с распараллеливанием.
+    """
+    n = A.shape[0]
+    matrix = A.copy()
+    rhs = b.copy()
     
-    # Ускорение
-    plt.subplot(1, 2, 1)
-    plt.plot(num_threads, speedups, marker='o', label="Ускорение")
-    plt.axhline(1, color='red', linestyle='--', label="Линейное ускорение")
-    plt.title("Ускорение")
-    plt.xlabel("Число потоков")
-    plt.ylabel("Ускорение")
-    plt.legend()
+    # Прямой ход
+    for k in range(n):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+            futures = []
+            for i in range(k + 1, n):
+                futures.append(executor.submit(gauss_forward, matrix, rhs, n, k))
+            concurrent.futures.wait(futures)
+    
+    # Обратный ход
+    x = np.zeros(n)
+    for k in range(n - 1, -1, -1):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+            executor.submit(gauss_backward, matrix, rhs, x, n, k)
+    
+    return x
 
-    # Эффективность
-    plt.subplot(1, 2, 2)
-    plt.plot(num_threads, efficiencies, marker='o', label="Эффективность")
-    plt.axhline(1, color='red', linestyle='--', label="Идеальная эффективность")
-    plt.title("Эффективность")
-    plt.xlabel("Число потоков")
-    plt.ylabel("Эффективность")
-    plt.legend()
-
-    plt.tight_layout()
-    plt.show()
-
-# Основная программа
+# Пример использования
 if __name__ == "__main__":
-    n = 500  # Размерность матрицы
-    print("Анализ параллельного метода Гаусса...")
-    plot_results(n)
+    n = 5  # Размер системы
+    np.random.seed(42)
+    A = np.random.rand(n, n) * 10  # Случайная матрица A
+    b = np.random.rand(n) * 10     # Случайный вектор b
+
+    print("Матрица A:")
+    print(A)
+    print("\nВектор b:")
+    print(b)
+
+    solution = parallel_gauss(A, b)
+    print("\nРешение x:")
+    print(solution)
+
+    residual = np.dot(A, solution) - b
+    print("Остаток:", residual)
