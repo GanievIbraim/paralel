@@ -1,10 +1,9 @@
 import socket
 import threading
-import os
+from pathlib import Path
 
 # Словарь для хранения клиентов и их адресов
 clients = {}
-addresses = {}
 
 # Создаем сокет
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -18,7 +17,6 @@ def accept_incoming_connections():
         client, client_address = sock.accept()
         print(f"Connection from {client_address} has been established.")
         client.send("Welcome to the chat! Please enter your name: ".encode("utf-8"))
-        addresses[client] = client_address
         threading.Thread(target=handle_client, args=(client,)).start()
 
 def handle_client(client):
@@ -40,6 +38,9 @@ def handle_client(client):
                     del clients[client]  # Удаляем клиента из списка
                     broadcast(f"{name} has left the chat.")  # Уведомляем остальных клиентов
                     break
+                elif msg.startswith("FILE:"):  # Если это файл
+                    file_name = msg.split(":", 1)[1]
+                    receive_file(client, file_name)
                 else:
                     broadcast(msg, name + ": ")  # Рассылаем сообщение всем остальным
             except ConnectionResetError:
@@ -55,15 +56,24 @@ def broadcast(msg, name=""):
     for sock in clients:
         sock.send((name + msg).encode("utf-8"))
 
-# Функция для приема файлов
-def receive_file(client, file_name):
+# Функция для приема и сохранения файла
+def handle_file_message(client, file_name):
+    # Путь к файлу на сервере
+    file_path = Path("received_files") / file_name
+    file_url = f"http://localhost:10001/{file_name}"  # Пример ссылки для скачивания
+    receive_file(client, file_path)  # Получаем и сохраняем файл
+    # Отправляем ссылку на файл всем клиентам
+    broadcast(f"File received: {file_url}", name="Server: ")
+
+def receive_file(client, file_path):
     file_size = int(client.recv(1024).decode("utf-8"))
-    with open(file_name, "wb") as file:
+    with open(file_path, "wb") as file:
         while file_size > 0:
             data = client.recv(1024)
             file.write(data)
             file_size -= len(data)
-    print(f"File {file_name} received successfully.")
+    print(f"File {file_path} received successfully.")
+
 
 # Запуск сервера
 accept_thread = threading.Thread(target=accept_incoming_connections)

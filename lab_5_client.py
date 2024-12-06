@@ -3,6 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import PhotoImage
+from pathlib import Path
 
 # Создаем сокет
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -19,26 +20,49 @@ def receive_messages():
     while True:
         try:
             msg = client.recv(1024).decode("utf-8")
-            chat_box.insert(tk.END, msg + "\n")
-        except:
-            print("An error occurred!")
+            if msg.startswith("FILE:"):
+                # Получаем имя файла
+                file_name = msg.split(":")[1]
+                file_size = int(client.recv(1024).decode("utf-8"))
+                save_file(file_name, file_size)
+            else:
+                chat_box.insert(tk.END, msg + "\n")
+        except Exception as e:
+            print(f"An error occurred: {e}")
             client.close()
             break
+
+# Функция для сохранения полученного файла
+def save_file(file_name, file_size):
+    save_path = filedialog.asksaveasfilename(defaultextension=".txt", initialfile=file_name)
+    if save_path:
+        with open(save_path, "wb") as file:
+            while file_size > 0:
+                data = client.recv(1024)
+                file.write(data)
+                file_size -= len(data)
+        chat_box.insert(tk.END, f"File {file_name} saved to {save_path}\n")
+        print(f"File {file_name} saved to {save_path}")
 
 # Функция для отправки файлов
 def send_file():
     file_path = filedialog.askopenfilename()
     if file_path:
-        file_name = os.path.basename(file_path)
+        file_name = Path(file_path).name
+        # Отправляем информацию о файле
         client.send(f"FILE:{file_name}".encode("utf-8"))
+        file_size = Path(file_path).stat().st_size
+        client.send(str(file_size).encode("utf-8"))
+        
         with open(file_path, "rb") as file:
-            file_size = os.path.getsize(file_path)
-            client.send(str(file_size).encode("utf-8"))
             while file_size > 0:
                 data = file.read(1024)
                 client.send(data)
                 file_size -= len(data)
         print(f"File {file_name} sent successfully.")
+        
+        # После отправки файла можно отобразить сообщение
+        chat_box.insert(tk.END, f"File sent: {file_name}\n")
 
 # Создание графического интерфейса
 root = tk.Tk()
